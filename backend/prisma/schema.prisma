@@ -1,0 +1,234 @@
+// This is your Prisma schema file
+// Multi-tenant database schema for BIASHARA 360
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// BUSINESS (TENANT) MODEL
+// ============================================
+
+model Business {
+  id                  String         @id @default(uuid())
+  businessName        String         @unique
+  businessEmail       String         @unique
+  password            String
+  phone               String?
+  logo                String?
+  description         String?
+  locationLat         Float?
+  locationLng         Float?
+  locationAddress     String?
+  mpesaNumber         String?
+  tillNumber          String?
+  paybillNumber       String?
+  status              BusinessStatus @default(ACTIVE)
+  forcePasswordChange Boolean        @default(false)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  // Relations
+  products   Product[]
+  orders     Order[]
+  reviews    Review[]
+  complaints Complaint[]
+
+  @@index([businessName])
+  @@index([status])
+  @@index([locationLat, locationLng])
+}
+
+enum BusinessStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
+}
+
+// ============================================
+// PRODUCT MODEL
+// ============================================
+
+model Product {
+  id                String   @id @default(uuid())
+  businessId        String
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name              String
+  description       String?
+  category          String
+  price             Decimal  @db.Decimal(10, 2)
+  cost              Decimal  @db.Decimal(10, 2)
+  quantityBought    Int
+  quantitySold      Int      @default(0)
+  quantityRemaining Int
+  images            String[] @default([])
+  isPublished       Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  orderItems     OrderItem[]
+  stockMovements StockMovement[]
+
+  @@index([businessId])
+  @@index([category])
+  @@index([isPublished])
+  @@index([name])
+}
+
+// ============================================
+// ORDER MODELS
+// ============================================
+
+model Order {
+  id               String       @id @default(uuid())
+  customerId       String?
+  businessId       String
+  business         Business     @relation(fields: [businessId], references: [id])
+  customerName     String
+  customerPhone    String
+  customerEmail    String?
+  deliveryType     DeliveryType
+  deliveryLat      Float?
+  deliveryLng      Float?
+  deliveryAddress  String?
+  totalAmount      Decimal      @db.Decimal(10, 2)
+  status           OrderStatus  @default(PENDING)
+  mpesaCode        String?
+  paymentConfirmed Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  // Relations
+  items OrderItem[]
+
+  @@index([businessId])
+  @@index([status])
+  @@index([customerId])
+  @@index([createdAt])
+}
+
+enum DeliveryType {
+  DELIVERY
+  PICKUP
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model OrderItem {
+  id              String  @id @default(uuid())
+  orderId         String
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product @relation(fields: [productId], references: [id])
+  quantity        Int
+  priceAtPurchase Decimal @db.Decimal(10, 2)
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+// ============================================
+// REVIEW MODEL
+// ============================================
+
+model Review {
+  id           String   @id @default(uuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerName String
+  rating       Int // 1-5
+  comment      String?
+  isApproved   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([businessId])
+  @@index([rating])
+  @@index([createdAt])
+}
+
+// ============================================
+// COMPLAINT MODEL
+// ============================================
+
+model Complaint {
+  id            String          @id @default(uuid())
+  businessId    String
+  business      Business        @relation(fields: [businessId], references: [id])
+  customerName  String
+  customerEmail String?
+  description   String
+  status        ComplaintStatus @default(PENDING)
+  resolution    String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([businessId])
+  @@index([status])
+}
+
+enum ComplaintStatus {
+  PENDING
+  INVESTIGATING
+  RESOLVED
+  DISMISSED
+}
+
+// ============================================
+// SUPER ADMIN MODEL
+// ============================================
+
+model Admin {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String
+  name      String
+  role      AdminRole @default(SUPER_ADMIN)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  MODERATOR
+}
+
+// ============================================
+// STOCK MOVEMENT LOG (FOR ANALYTICS)
+// ============================================
+
+model StockMovement {
+  id            String       @id @default(uuid())
+  productId     String
+  product       Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  businessId    String
+  movementType  MovementType
+  quantity      Int
+  previousStock Int
+  newStock      Int
+  notes         String?
+  createdAt     DateTime     @default(now())
+
+  @@index([productId])
+  @@index([businessId])
+  @@index([createdAt])
+}
+
+enum MovementType {
+  PURCHASE
+  SALE
+  ADJUSTMENT
+  RETURN
+}
